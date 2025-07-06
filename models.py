@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+MAX_LEN = 256  # Define a maximum sequence length for the model
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model: int, num_heads: int):
         super().__init__()
@@ -46,8 +48,6 @@ class MultiHeadAttention(nn.Module):
             scores = torch.matmul(Q, K.transpose(-2, -1)) / (self.d_head ** 0.5) + attn_mask.unsqueeze(0).unsqueeze(0)
             
         weights = torch.softmax(scores, dim=-1)  # (B, H, T, T)
-        # print("Scores shape:", scores.shape)
-        # print("Weights shape:", weights.shape)
         attn_output = torch.matmul(weights, V)  # (B, H, T, d_head)
 
         # Step 4: Concatenate heads
@@ -92,6 +92,27 @@ class TransformerBlock(nn.Module):
         ffn_out = self.ffn(x)
         x = x + self.dropout(ffn_out)
         x = self.ln2(x)
+        return x
+    
+class LLM(nn.Module):
+    def __init__(self, vocab_size, hidden_dim):
+        super(LLM, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, hidden_dim)
+        self.pos_embedding = nn.Parameter(torch.zeros(1, MAX_LEN, hidden_dim))
+        self.transformer_blocks = nn.ModuleList([
+            TransformerBlock(hidden_dim, num_heads=8, d_ff=hidden_dim) for _ in range(6)
+        ])
+        self.fc = nn.Linear(hidden_dim, vocab_size)
+
+    def forward(self, x):
+
+        B, T = x.size()
+        x = self.embedding(x) + self.pos_embedding[:, :T]
+
+        for block in self.transformer_blocks:
+            x = block(x)
+
+        x = self.fc(x)
         return x
 
 if __name__ == "__main__":
